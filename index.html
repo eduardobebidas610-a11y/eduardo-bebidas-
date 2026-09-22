@@ -1,0 +1,1329 @@
+```html
+<!DOCTYPE html>
+<html lang="pt-BR" class="h-full bg-slate-50">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EDUARDO BEBIDAS</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0f7ff',
+                            100: '#e0effe',
+                            500: '#0284c7',
+                            600: '#026597',
+                            700: '#0369a1',
+                            800: '#075985',
+                            900: '#0c4a6e',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Google Fonts Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Html5Qrcode Barcode Scanner -->
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        /* Custom scrollbars */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        #qr-reader video { object-fit: cover !important; border-radius: 0.75rem; }
+    </style>
+</head>
+<body class="h-full text-slate-800 antialiased bg-slate-50 flex flex-col">
+
+    <!-- Toast Message Container -->
+    <div id="toast-container" class="fixed top-5 right-5 z-50 flex flex-col gap-2 max-w-sm pointer-events-none"></div>
+
+    <!-- Modal Dialog System -->
+    <div id="app-modal" class="fixed inset-0 z-40 hidden flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm transition-opacity">
+        <div id="app-modal-content" class="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-lg w-full p-6 space-y-4 transform transition-all scale-95 opacity-0">
+            <div class="flex items-start justify-between">
+                <h3 id="app-modal-title" class="text-xl font-bold text-slate-900"></h3>
+                <button onclick="closeModal()" class="text-slate-400 hover:text-slate-600 rounded-lg p-1">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <div id="app-modal-body" class="text-slate-600 text-sm leading-relaxed"></div>
+            <div id="app-modal-footer" class="flex justify-end gap-3 pt-2"></div>
+        </div>
+    </div>
+
+    <!-- Barcode Camera Scanner Modal -->
+    <div id="scanner-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+        <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full p-6 space-y-4">
+            <div class="flex items-center justify-between border-b pb-3 border-slate-100">
+                <div class="flex items-center gap-2">
+                    <div class="p-2 bg-brand-50 text-brand-600 rounded-xl">
+                        <i data-lucide="camera" class="w-5 h-5"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-slate-900 text-lg">ESCANEAR CÓDIGO DE BARRAS</h3>
+                        <p class="text-xs text-slate-500">Leitor de Câmera em Tempo Real</p>
+                    </div>
+                </div>
+                <button onclick="stopCameraScanner()" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
+                    <i data-lucide="x" class="w-6 h-6"></i>
+                </button>
+            </div>
+
+            <div class="space-y-3">
+                <div id="scanner-status" class="bg-slate-100 rounded-xl p-3 text-xs text-slate-600 flex items-center justify-between">
+                    <span id="scanner-status-text">Iniciando câmera...</span>
+                    <span id="scanner-diagnostic" class="font-mono bg-white px-2 py-0.5 rounded border text-[11px] text-slate-700 hidden">CÓDIGO: -</span>
+                </div>
+
+                <div class="relative overflow-hidden rounded-xl bg-slate-900 aspect-square flex items-center justify-center border-2 border-brand-500/30">
+                    <div id="qr-reader" class="w-full h-full"></div>
+                    <div class="absolute inset-0 pointer-events-none border-2 border-brand-500/60 rounded-xl m-8 flex items-center justify-center">
+                        <div class="w-full h-0.5 bg-red-500/80 animate-pulse"></div>
+                    </div>
+                </div>
+
+                <p class="text-center text-xs text-slate-500">
+                    Aponte a câmera para o código de barras do produto. A leitura acontece automaticamente.
+                </p>
+            </div>
+
+            <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                <button onclick="stopCameraScanner()" class="px-4 py-2 bg-slate-100 text-slate-700 hover:bg-slate-200 text-sm font-medium rounded-xl transition">
+                    Fechar Leitor
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main View Dynamic Container -->
+    <div id="app-root" class="flex-1 flex flex-col min-h-screen">
+        <!-- Rendered via JS based on session / setup state -->
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, setDoc, getDoc, getDocs, updateDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Firebase Setup
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'eduardo-bebidas-prod';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+            apiKey: "demo-api-key",
+            authDomain: "demo-project.firebaseapp.com",
+            projectId: "demo-project",
+            storageBucket: "demo-project.appspot.com",
+            messagingSenderId: "123456789",
+            appId: "1:123456789:web:123456789"
+        };
+
+        const firebaseApp = initializeApp(firebaseConfig);
+        const auth = getAuth(firebaseApp);
+        const db = getFirestore(firebaseApp);
+
+        // Application State Engine
+        const AppState = {
+            currentUser: null,
+            activeTab: 'dashboard',
+            scannerTargetAction: 'pos', // 'pos', 'lookup', 'inventory', 'product_entry'
+            html5QrcodeScanner: null,
+            isScanning: false,
+            lastScannedCode: null,
+            lastScanTime: 0,
+            usbBuffer: '',
+            usbTimeout: null,
+            
+            // Collections Data (Pure In-Memory Sync with Firestore)
+            users: [],
+            products: [],
+            categories: [],
+            units: [],
+            conversions: [],
+            suppliers: [],
+            stockEntries: [],
+            stockMovements: [],
+            clients: [],
+            sales: [],
+            fiadoAccounts: [],
+            fiadoPayments: [],
+            cashSessions: [],
+            cashMovements: [],
+            calendarEvents: [],
+            auditLogs: [],
+            settings: {
+                storeName: 'EDUARDO BEBIDAS',
+                fiadoDefaultDays: 15,
+                fiadoAlert1Days: 15,
+                fiadoAlert2Days: 30,
+            },
+
+            // POS Current Sale Cart
+            posCart: [],
+            posClient: null,
+            posPaymentMethod: 'DINHEIRO', // DINHEIRO, PIX, CARTAO, FIADO, MULTIPLO
+            posPaymentsList: [],
+            posDiscount: 0,
+            
+            // Active Filters
+            filters: {
+                productSearch: '',
+                clientSearch: '',
+                stockFilter: 'all'
+            }
+        };
+
+        // Global Helper Functions
+        window.showToast = function(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            
+            let bg = 'bg-slate-900 text-white';
+            let icon = 'info';
+            if (type === 'success') { bg = 'bg-emerald-600 text-white'; icon = 'check-circle'; }
+            if (type === 'error') { bg = 'bg-rose-600 text-white'; icon = 'alert-triangle'; }
+            if (type === 'warning') { bg = 'bg-amber-500 text-white'; icon = 'alert-circle'; }
+
+            toast.className = `${bg} px-4 py-3 rounded-xl shadow-xl flex items-center gap-3 text-sm font-medium transition-all duration-300 pointer-events-auto transform translate-y-2 opacity-0`;
+            toast.innerHTML = `<i data-lucide="${icon}" class="w-5 h-5 flex-shrink-0"></i><span>${message}</span>`;
+            
+            container.appendChild(toast);
+            lucide.createIcons();
+
+            setTimeout(() => {
+                toast.classList.remove('translate-y-2', 'opacity-0');
+            }, 10);
+
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => toast.remove(), 300);
+            }, 4000);
+        };
+
+        window.showModal = function(title, bodyHtml, footerButtonsHtml = '') {
+            const modal = document.getElementById('app-modal');
+            const content = document.getElementById('app-modal-content');
+            document.getElementById('app-modal-title').textContent = title;
+            document.getElementById('app-modal-body').innerHTML = bodyHtml;
+            document.getElementById('app-modal-footer').innerHTML = footerButtonsHtml;
+            
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                content.classList.remove('scale-95', 'opacity-0');
+            }, 10);
+            lucide.createIcons();
+        };
+
+        window.closeModal = function() {
+            const modal = document.getElementById('app-modal');
+            const content = document.getElementById('app-modal-content');
+            content.classList.add('scale-95', 'opacity-0');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 200);
+        };
+
+        // Formatters
+        const formatMoney = (val) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val || 0);
+        const formatDate = (dateStr) => {
+            if (!dateStr) return '-';
+            const d = new Date(dateStr);
+            return isNaN(d) ? dateStr : d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+        };
+        const formatDateOnly = (dateStr) => {
+            if (!dateStr) return '-';
+            const d = new Date(dateStr);
+            return isNaN(d) ? dateStr : d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        };
+
+        // Firestore Collection Helpers
+        const getColPath = (colName) => `artifacts/${appId}/public/data/${colName}`;
+
+        async function syncCollection(colName, stateProp) {
+            try {
+                const q = collection(db, 'artifacts', appId, 'public', 'data', colName);
+                onSnapshot(q, (snapshot) => {
+                    const items = [];
+                    snapshot.forEach(docSnap => {
+                        items.push({ id: docSnap.id, ...docSnap.data() });
+                    });
+                    AppState[stateProp] = items;
+                    renderApp();
+                }, (err) => {
+                    console.error(`Error syncing ${colName}:`, err);
+                });
+            } catch (e) {
+                console.error(`Collection ${colName} init error`, e);
+            }
+        }
+
+        async function saveData(colName, id, data) {
+            try {
+                const docRef = doc(db, 'artifacts', appId, 'public', 'data', colName, id);
+                await setDoc(docRef, { ...data, updatedAt: new Date().toISOString() }, { merge: true });
+                return true;
+            } catch (e) {
+                console.error(`Save error in ${colName}:`, e);
+                showToast("Erro ao salvar dados no servidor.", "error");
+                return false;
+            }
+        }
+
+        async function logAudit(action, recordAffected, oldValue = null, newValue = null, reason = '') {
+            const audit = {
+                id: crypto.randomUUID(),
+                userName: AppState.currentUser ? AppState.currentUser.name : 'Sistema/Visitante',
+                userRole: AppState.currentUser ? AppState.currentUser.role : 'ADMIN',
+                action,
+                recordAffected,
+                oldValue,
+                newValue,
+                reason,
+                timestamp: new Date().toISOString()
+            };
+            await saveData('auditLogs', audit.id, audit);
+        }
+
+        async function initAuth() {
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (e) {
+                console.warn("Auth setup fallback:", e);
+            }
+
+            // Sync all collections
+            await Promise.all([
+                syncCollection('users', 'users'),
+                syncCollection('products', 'products'),
+                syncCollection('categories', 'categories'),
+                syncCollection('units', 'units'),
+                syncCollection('conversions', 'conversions'),
+                syncCollection('suppliers', 'suppliers'),
+                syncCollection('stockEntries', 'stockEntries'),
+                syncCollection('stockMovements', 'stockMovements'),
+                syncCollection('clients', 'clients'),
+                syncCollection('sales', 'sales'),
+                syncCollection('fiadoAccounts', 'fiadoAccounts'),
+                syncCollection('fiadoPayments', 'fiadoPayments'),
+                syncCollection('cashSessions', 'cashSessions'),
+                syncCollection('cashMovements', 'cashMovements'),
+                syncCollection('calendarEvents', 'calendarEvents'),
+                syncCollection('auditLogs', 'auditLogs'),
+            ]);
+        }
+
+        window.buscarProdutoPorCodigo = function(barcode) {
+            if (!barcode) return null;
+            const codeClean = barcode.trim();
+            return AppState.products.find(p => p.barcode === codeClean || p.internalCode === codeClean);
+        };
+
+        window.processBarcodeResult = async function(code) {
+            if (!code) return;
+            const now = Date.now();
+            // Prevent duplicated scans within 1.5s
+            if (AppState.lastScannedCode === code && (now - AppState.lastScanTime) < 1500) {
+                return;
+            }
+            AppState.lastScannedCode = code;
+            AppState.lastScanTime = now;
+
+            const product = window.buscarProdutoPorCodigo(code);
+
+            if (product) {
+                showToast(`PRODUTO ENCONTRADO: ${product.name}`, "success");
+                
+                if (AppState.scannerTargetAction === 'pos') {
+                    window.addToPosCart(product.id);
+                } else if (AppState.scannerTargetAction === 'lookup') {
+                    AppState.filters.productSearch = code;
+                    AppState.activeTab = 'products';
+                    renderApp();
+                } else if (AppState.scannerTargetAction === 'inventory') {
+                    window.openInventoryModal(product.id);
+                } else if (AppState.scannerTargetAction === 'product_entry') {
+                    window.openStockEntryModal(product.id);
+                }
+            } else {
+                showToast(`PRODUTO NÃO CADASTRADO (${code})`, "warning");
+                if (AppState.currentUser && AppState.currentUser.permissions?.canManageProducts) {
+                    window.openProductModal(null, code);
+                }
+            }
+
+            if (AppState.isScanning) {
+                window.stopCameraScanner();
+            }
+        };
+
+        // USB / Bluetooth Scanner Hardware Listener
+        window.addEventListener('keydown', (e) => {
+            // Ignore keystrokes inside input or textarea elements unless manual scanner field
+            if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName) && e.target.id !== 'global-manual-barcode') {
+                return;
+            }
+
+            if (e.key === 'Enter') {
+                if (AppState.usbBuffer.length >= 3) {
+                    window.processBarcodeResult(AppState.usbBuffer);
+                }
+                AppState.usbBuffer = '';
+            } else if (e.key.length === 1) {
+                AppState.usbBuffer += e.key;
+                clearTimeout(AppState.usbTimeout);
+                AppState.usbTimeout = setTimeout(() => {
+                    AppState.usbBuffer = '';
+                }, 100);
+            }
+        });
+
+        // Camera Scanner Handlers
+        window.startCameraScanner = function(targetAction = 'pos') {
+            AppState.scannerTargetAction = targetAction;
+            const modal = document.getElementById('scanner-modal');
+            const statusText = document.getElementById('scanner-status-text');
+            const diagText = document.getElementById('scanner-diagnostic');
+            
+            modal.classList.remove('hidden');
+            diagText.classList.remove('hidden');
+            statusText.textContent = "Solicitando permissão de câmera...";
+
+            AppState.html5QrcodeScanner = new Html5Qrcode("qr-reader");
+            AppState.isScanning = true;
+
+            const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+
+            AppState.html5QrcodeScanner.start(
+                { facingMode: "environment" },
+                config,
+                (decodedText, decodedResult) => {
+                    diagText.textContent = `CÓDIGO: ${decodedText}`;
+                    statusText.textContent = "CÓDIGO DETECTADO!";
+                    window.processBarcodeResult(decodedText);
+                },
+                (errorMessage) => {
+                    // Frame scan failed, expected for frames with no barcodes
+                }
+            ).catch(err => {
+                console.error("Camera error:", err);
+                statusText.textContent = "CÂMERA NÃO AUTORIZADA OU INDISPONÍVEL";
+                showToast("Não foi possível acessar a câmera do dispositivo.", "error");
+            });
+        };
+
+        window.stopCameraScanner = function() {
+            if (AppState.html5QrcodeScanner && AppState.isScanning) {
+                AppState.html5QrcodeScanner.stop().then(() => {
+                    AppState.isScanning = false;
+                    document.getElementById('scanner-modal').classList.add('hidden');
+                }).catch(err => {
+                    document.getElementById('scanner-modal').classList.add('hidden');
+                    AppState.isScanning = false;
+                });
+            } else {
+                document.getElementById('scanner-modal').classList.add('hidden');
+            }
+        };
+
+        window.addToPosCart = function(productId, qty = 1) {
+            const product = AppState.products.find(p => p.id === productId);
+            if (!product) return;
+
+            // Check Stock
+            const currentCartQty = AppState.posCart.filter(item => item.productId === productId)
+                .reduce((acc, curr) => acc + curr.quantity, 0);
+
+            if (product.stockQuantity < (currentCartQty + qty)) {
+                showToast(`ESTOQUE INSUFICIENTE: Disponível ${product.stockQuantity} ${product.unit}`, "error");
+                return;
+            }
+
+            const existingIndex = AppState.posCart.findIndex(item => item.productId === productId);
+            if (existingIndex >= 0) {
+                AppState.posCart[existingIndex].quantity += qty;
+                AppState.posCart[existingIndex].subtotal = AppState.posCart[existingIndex].quantity * AppState.posCart[existingIndex].unitPrice;
+            } else {
+                AppState.posCart.push({
+                    id: crypto.randomUUID(),
+                    productId: product.id,
+                    name: product.name,
+                    unit: product.unit,
+                    unitPrice: product.sellPrice,
+                    quantity: qty,
+                    subtotal: product.sellPrice * qty
+                });
+            }
+            renderApp();
+        };
+
+        window.updateCartItemQty = function(cartItemId, newQty) {
+            const item = AppState.posCart.find(i => i.id === cartItemId);
+            if (!item) return;
+
+            const product = AppState.products.find(p => p.id === item.productId);
+            if (newQty <= 0) {
+                AppState.posCart = AppState.posCart.filter(i => i.id !== cartItemId);
+            } else {
+                if (product && product.stockQuantity < newQty) {
+                    showToast(`ESTOQUE INSUFICIENTE: Disponível ${product.stockQuantity} ${product.unit}`, "error");
+                    return;
+                }
+                item.quantity = newQty;
+                item.subtotal = item.quantity * item.unitPrice;
+            }
+            renderApp();
+        };
+
+        window.removeFromCart = function(cartItemId) {
+            AppState.posCart = AppState.posCart.filter(i => i.id !== cartItemId);
+            renderApp();
+        };
+
+        window.finalizeSale = async function() {
+            if (AppState.posCart.length === 0) {
+                showToast("O carrinho está vazio!", "warning");
+                return;
+            }
+
+            const subtotal = AppState.posCart.reduce((sum, item) => sum + item.subtotal, 0);
+            const total = Math.max(0, subtotal - AppState.posDiscount);
+
+            // Validate Fiado
+            if (AppState.posPaymentMethod === 'FIADO') {
+                if (!AppState.posClient) {
+                    showToast("Selecione um Cliente Fiado para esta venda!", "warning");
+                    return;
+                }
+                const client = AppState.clients.find(c => c.id === AppState.posClient);
+                if (!client) {
+                    showToast("Cliente selecionado não encontrado.", "error");
+                    return;
+                }
+
+                const currentDebt = client.currentDebt || 0;
+                if ((currentDebt + total) > client.creditLimit) {
+                    showToast(`LIMITE DE CRÉDITO INSUFICIENTE! Limite: ${formatMoney(client.creditLimit)}, Dívida Atual: ${formatMoney(currentDebt)}`, "error");
+                    return;
+                }
+            }
+
+            // Create Transactional Sale Document
+            const saleId = crypto.randomUUID();
+            const sale = {
+                id: saleId,
+                code: `VND-${Date.now().toString().slice(-6)}`,
+                date: new Date().toISOString(),
+                sellerName: AppState.currentUser.name,
+                sellerId: AppState.currentUser.id,
+                items: AppState.posCart,
+                subtotal,
+                discount: AppState.posDiscount,
+                total,
+                paymentMethod: AppState.posPaymentMethod,
+                clientId: AppState.posClient || null,
+                status: 'APROVADA'
+            };
+
+            // Deduct Stock
+            for (const item of AppState.posCart) {
+                const prod = AppState.products.find(p => p.id === item.productId);
+                if (prod) {
+                    const newStock = prod.stockQuantity - item.quantity;
+                    await saveData('products', prod.id, { ...prod, stockQuantity: newStock });
+                    
+                    // Stock movement log
+                    const move = {
+                        id: crypto.randomUUID(),
+                        productId: prod.id,
+                        productName: prod.name,
+                        type: 'venda',
+                        quantity: -item.quantity,
+                        unit: item.unit,
+                        reason: `Venda ${sale.code}`,
+                        userName: AppState.currentUser.name,
+                        date: new Date().toISOString(),
+                        stockBefore: prod.stockQuantity,
+                        stockAfter: newStock
+                    };
+                    await saveData('stockMovements', move.id, move);
+                }
+            }
+
+            // Create Fiado Account if applicable
+            if (AppState.posPaymentMethod === 'FIADO') {
+                const client = AppState.clients.find(c => c.id === AppState.posClient);
+                const dueDate = new Date();
+                dueDate.setDate(dueDate.getDate() + (AppState.settings.fiadoDefaultDays || 15));
+
+                const fiadoAcc = {
+                    id: crypto.randomUUID(),
+                    clientId: client.id,
+                    clientName: client.name,
+                    saleId: sale.id,
+                    saleCode: sale.code,
+                    createdAt: new Date().toISOString(),
+                    dueDate: dueDate.toISOString(),
+                    originalAmount: total,
+                    paidAmount: 0,
+                    remainingBalance: total,
+                    status: 'Em aberto'
+                };
+
+                await saveData('fiadoAccounts', fiadoAcc.id, fiadoAcc);
+                await saveData('clients', client.id, {
+                    ...client,
+                    currentDebt: (client.currentDebt || 0) + total
+                });
+
+                // Add to calendar
+                const event = {
+                    id: crypto.randomUUID(),
+                    title: `Vencimento Fiado: ${client.name}`,
+                    date: dueDate.toISOString().split('T')[0],
+                    type: 'fiado_due',
+                    description: `Conta referente à venda ${sale.code} - Valor: ${formatMoney(total)}`
+                };
+                await saveData('calendarEvents', event.id, event);
+            }
+
+            // Save Sale
+            await saveData('sales', sale.id, sale);
+            await logAudit('venda_aprovada', `Venda ${sale.code}`, null, sale);
+
+            showToast("VENDA APROVADA COM SUCESSO!", "success");
+
+            // Reset POS State
+            AppState.posCart = [];
+            AppState.posClient = null;
+            AppState.posDiscount = 0;
+            AppState.posPaymentMethod = 'DINHEIRO';
+            renderApp();
+        };
+
+        function renderFirstSetup() {
+            return `
+            <div class="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+                <div class="bg-white rounded-3xl shadow-2xl border border-slate-100 max-w-lg w-full p-8 space-y-6">
+                    <div class="text-center space-y-2">
+                        <div class="w-16 h-16 bg-brand-500/10 text-brand-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                            <i data-lucide="shield-check" class="w-8 h-8"></i>
+                        </div>
+                        <h1 class="text-2xl font-black text-slate-900">EDUARDO BEBIDAS</h1>
+                        <p class="text-sm text-slate-500">Configuração Inicial do Sistema Comercial</p>
+                        <p class="text-xs bg-amber-50 text-amber-800 p-3 rounded-xl border border-amber-200 text-left">
+                            <strong>Atenção:</strong> Nenhum funcionário cadastrado. Cadastre o primeiro Administrador para iniciar as atividades comerciais.
+                        </p>
+                    </div>
+
+                    <form id="first-user-form" class="space-y-4" onsubmit="handleFirstUserSubmit(event)">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Nome do Proprietário / Administrador *</label>
+                            <input type="text" id="admin-name" required class="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none text-sm" placeholder="Ex: Eduardo Santos">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">E-mail Comercial *</label>
+                            <input type="email" id="admin-email" required class="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none text-sm" placeholder="eduardo@bebidas.com">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Senha de Acesso *</label>
+                            <input type="password" id="admin-pass" minlength="6" required class="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none text-sm" placeholder="••••••••">
+                        </div>
+                        <button type="submit" class="w-full py-4 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl shadow-lg transition flex items-center justify-center gap-2">
+                            <i data-lucide="check-circle" class="w-5 h-5"></i>
+                            Concluir Primeira Configuração
+                        </button>
+                    </form>
+                </div>
+            </div>
+            `;
+        }
+
+        window.handleFirstUserSubmit = async function(e) {
+            e.preventDefault();
+            const name = document.getElementById('admin-name').value;
+            const email = document.getElementById('admin-email').value;
+            const password = document.getElementById('admin-pass').value;
+
+            const adminUser = {
+                id: crypto.randomUUID(),
+                name,
+                email,
+                password, // Note: In production hashed
+                role: 'ADMINISTRADOR',
+                active: true,
+                createdAt: new Date().toISOString(),
+                permissions: {
+                    canAccessSales: true,
+                    canCancelSale: true,
+                    canChangePrice: true,
+                    canAdjustStock: true,
+                    canRegisterLoss: true,
+                    canRegisterPayment: true,
+                    canManageCash: true,
+                    canManageProducts: true,
+                    canViewReports: true,
+                    canManageUsers: true,
+                    canManageSettings: true
+                }
+            };
+
+            await saveData('users', adminUser.id, adminUser);
+            await logAudit('primeira_configuracao', 'Sistema', null, { adminName: name });
+
+            AppState.currentUser = adminUser;
+            showToast("Configuração inicial concluída com sucesso!", "success");
+            renderApp();
+        };
+
+        function renderLogin() {
+            return `
+            <div class="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+                <div class="bg-white rounded-3xl shadow-2xl border border-slate-100 max-w-md w-full p-8 space-y-6">
+                    <div class="text-center space-y-2">
+                        <div class="w-16 h-16 bg-brand-500/10 text-brand-600 rounded-2xl flex items-center justify-center mx-auto mb-2">
+                            <i data-lucide="store" class="w-8 h-8"></i>
+                        </div>
+                        <h1 class="text-2xl font-black text-slate-900">EDUARDO BEBIDAS</h1>
+                        <p class="text-xs text-slate-500 uppercase tracking-widest font-semibold">Acesso Restrito ao Sistema</p>
+                    </div>
+
+                    <form id="login-form" class="space-y-4" onsubmit="handleLoginSubmit(event)">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">E-mail do Funcionário</label>
+                            <input type="email" id="login-email" required class="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Senha</label>
+                            <input type="password" id="login-pass" required class="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none text-sm">
+                        </div>
+                        <button type="submit" class="w-full py-3.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl shadow-lg transition flex items-center justify-center gap-2">
+                            <i data-lucide="log-in" class="w-5 h-5"></i>
+                            Entrar no Sistema
+                        </button>
+                    </form>
+                </div>
+            </div>
+            `;
+        }
+
+        window.handleLoginSubmit = function(e) {
+            e.preventDefault();
+            const email = document.getElementById('login-email').value;
+            const pass = document.getElementById('login-pass').value;
+
+            const user = AppState.users.find(u => u.email === email && u.password === pass && u.active);
+            if (user) {
+                AppState.currentUser = user;
+                logAudit('login_usuario', `Sessão iniciada por ${user.name}`);
+                showToast(`Bem-vindo, ${user.name}!`, "success");
+                renderApp();
+            } else {
+                showToast("E-mail ou senha incorretos ou usuário inativo.", "error");
+            }
+        };
+
+        window.handleLogout = function() {
+            logAudit('logout_usuario', `Sessão encerrada por ${AppState.currentUser.name}`);
+            AppState.currentUser = null;
+            renderApp();
+        };
+
+        function renderSidebar() {
+            const navGroup = (title, items) => `
+                <div class="space-y-1 py-2">
+                    <p class="px-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">${title}</p>
+                    ${items.map(item => `
+                        <button onclick="switchTab('${item.id}')" class="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition ${AppState.activeTab === item.id ? 'bg-brand-600 text-white shadow-md shadow-brand-500/20' : 'text-slate-600 hover:bg-slate-100'}">
+                            <i data-lucide="${item.icon}" class="w-4 h-4"></i>
+                            <span>${item.label}</span>
+                            ${item.badge ? `<span class="ml-auto bg-rose-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">${item.badge}</span>` : ''}
+                        </button>
+                    `).join('')}
+                </div>
+            `;
+
+            // Dynamic badges
+            const lowStockCount = AppState.products.filter(p => p.stockQuantity <= p.minStock).length;
+            const pendingFiadoCount = AppState.fiadoAccounts.filter(a => a.status === 'Atrasado' || a.status === 'Em aberto').length;
+
+            return `
+            <aside class="w-64 bg-white border-r border-slate-200 flex flex-col justify-between flex-shrink-0">
+                <div class="p-5 space-y-4 overflow-y-auto">
+                    <div class="flex items-center gap-3 border-b border-slate-100 pb-4">
+                        <div class="w-10 h-10 bg-brand-600 text-white rounded-xl flex items-center justify-center font-black text-xl shadow-md">
+                            EB
+                        </div>
+                        <div>
+                            <h2 class="font-bold text-slate-900 text-base leading-tight">EDUARDO BEBIDAS</h2>
+                            <span class="text-[11px] text-slate-400 font-medium">Gestão Comercial</span>
+                        </div>
+                    </div>
+
+                    ${navGroup('Principal', [
+                        { id: 'dashboard', label: 'Início', icon: 'layout-dashboard' },
+                        { id: 'pos', label: 'Vendas (PDV)', icon: 'shopping-cart' },
+                        { id: 'cash', label: 'Caixa', icon: 'wallet' },
+                    ])}
+
+                    ${navGroup('Produtos e Estoque', [
+                        { id: 'products', label: 'Produtos', icon: 'package' },
+                        { id: 'stock_entries', label: 'Entradas', icon: 'arrow-down-right' },
+                        { id: 'stock', label: 'Estoque', icon: 'boxes' },
+                        { id: 'stock_alerts', label: 'Alertas de Estoque', icon: 'alert-circle', badge: lowStockCount > 0 ? lowStockCount : null },
+                    ])}
+
+                    ${navGroup('Clientes', [
+                        { id: 'clients', label: 'Clientes', icon: 'users' },
+                        { id: 'fiado', label: 'Fiado', icon: 'credit-card' },
+                        { id: 'fiado_alerts', label: 'Alertas do Fiado', icon: 'bell', badge: pendingFiadoCount > 0 ? pendingFiadoCount : null },
+                    ])}
+
+                    ${navGroup('Gestão', [
+                        { id: 'suppliers', label: 'Fornecedores', icon: 'truck' },
+                        { id: 'calendar', label: 'Calendário', icon: 'calendar' },
+                        { id: 'reports', label: 'Relatórios', icon: 'bar-chart-3' },
+                    ])}
+
+                    ${navGroup('Administração', [
+                        { id: 'users', label: 'Usuários', icon: 'user-cog' },
+                        { id: 'settings', label: 'Configurações', icon: 'settings' },
+                        { id: 'audit', label: 'Auditoria', icon: 'shield-alert' },
+                    ])}
+                </div>
+
+                <div class="p-4 border-t border-slate-100 bg-slate-50/50">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2.5">
+                            <div class="w-8 h-8 bg-brand-100 text-brand-700 rounded-lg flex items-center justify-center font-bold text-xs">
+                                ${AppState.currentUser.name.charAt(0)}
+                            </div>
+                            <div>
+                                <p class="text-xs font-bold text-slate-800 line-clamp-1">${AppState.currentUser.name}</p>
+                                <p class="text-[10px] text-slate-400 font-medium">${AppState.currentUser.role}</p>
+                            </div>
+                        </div>
+                        <button onclick="handleLogout()" class="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg transition" title="Sair">
+                            <i data-lucide="log-out" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                </div>
+            </aside>
+            `;
+        }
+
+        window.switchTab = function(tabId) {
+            AppState.activeTab = tabId;
+            renderApp();
+        };
+
+        function renderDashboardView() {
+            const todayStr = new Date().toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+            
+            // Dynamic metrics
+            const todaySales = AppState.sales.filter(s => {
+                const sDate = new Date(s.date).toDateString();
+                return sDate === new Date().toDateString();
+            });
+
+            const totalSalesToday = todaySales.reduce((acc, s) => acc + s.total, 0);
+            const totalStockValue = AppState.products.reduce((acc, p) => acc + (p.stockQuantity * p.sellPrice), 0);
+            const totalFiadoDebt = AppState.fiadoAccounts.filter(a => a.remainingBalance > 0).reduce((acc, a) => acc + a.remainingBalance, 0);
+            const lowStockProducts = AppState.products.filter(p => p.stockQuantity <= p.minStock);
+
+            return `
+            <div class="p-8 space-y-8 max-w-7xl mx-auto w-full">
+                <!-- Header -->
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                    <div>
+                        <h1 class="text-2xl font-black text-slate-900">EDUARDO BEBIDAS</h1>
+                        <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide mt-1">${todayStr}</p>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <button onclick="startCameraScanner('pos')" class="px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-sm font-bold shadow-md transition flex items-center gap-2">
+                            <i data-lucide="scan" class="w-4 h-4"></i>
+                            Escanear Barcode
+                        </button>
+                        <button onclick="switchTab('pos')" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-bold shadow-md transition flex items-center gap-2">
+                            <i data-lucide="plus-circle" class="w-4 h-4"></i>
+                            Nova Venda
+                        </button>
+                    </div>
+                </div>
+
+                <!-- KPI Cards -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                    <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Vendas Hoje</span>
+                            <div class="p-2 bg-emerald-50 text-emerald-600 rounded-xl"><i data-lucide="trending-up" class="w-5 h-5"></i></div>
+                        </div>
+                        <p class="text-2xl font-black text-slate-900">${formatMoney(totalSalesToday)}</p>
+                        <p class="text-xs text-slate-500">${todaySales.length} venda(s) realizada(s)</p>
+                    </div>
+
+                    <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Valor em Estoque</span>
+                            <div class="p-2 bg-brand-50 text-brand-600 rounded-xl"><i data-lucide="boxes" class="w-5 h-5"></i></div>
+                        </div>
+                        <p class="text-2xl font-black text-slate-900">${formatMoney(totalStockValue)}</p>
+                        <p class="text-xs text-slate-500">${AppState.products.length} produto(s) cadastrado(s)</p>
+                    </div>
+
+                    <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Total a Receber (Fiado)</span>
+                            <div class="p-2 bg-amber-50 text-amber-600 rounded-xl"><i data-lucide="credit-card" class="w-5 h-5"></i></div>
+                        </div>
+                        <p class="text-2xl font-black text-slate-900">${formatMoney(totalFiadoDebt)}</p>
+                        <p class="text-xs text-slate-500">${AppState.clients.length} cliente(s) registrados</p>
+                    </div>
+
+                    <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Alertas de Estoque</span>
+                            <div class="p-2 bg-rose-50 text-rose-600 rounded-xl"><i data-lucide="alert-triangle" class="w-5 h-5"></i></div>
+                        </div>
+                        <p class="text-2xl font-black text-slate-900">${lowStockProducts.length}</p>
+                        <p class="text-xs text-slate-500">Produtos no mínimo ou zerados</p>
+                    </div>
+                </div>
+
+                <!-- Sections -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <!-- Recent Sales -->
+                    <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                        <div class="flex items-center justify-between border-b pb-3 border-slate-100">
+                            <h3 class="font-bold text-slate-900 text-base">Últimas Vendas</h3>
+                            <button onclick="switchTab('reports')" class="text-xs font-bold text-brand-600 hover:text-brand-800">Ver Todas</button>
+                        </div>
+                        ${todaySales.length === 0 ? `
+                            <div class="p-8 text-center text-slate-400 space-y-2">
+                                <i data-lucide="shopping-bag" class="w-8 h-8 mx-auto stroke-1"></i>
+                                <p class="text-xs">Nenhuma venda registrada hoje.</p>
+                            </div>
+                        ` : `
+                            <div class="divide-y divide-slate-100">
+                                ${todaySales.slice(0, 5).map(s => `
+                                    <div class="py-3 flex items-center justify-between text-xs">
+                                        <div>
+                                            <p class="font-bold text-slate-800">${s.code}</p>
+                                            <p class="text-slate-400">${formatDate(s.date)} • ${s.paymentMethod}</p>
+                                        </div>
+                                        <span class="font-bold text-emerald-600 text-sm">${formatMoney(s.total)}</span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        `}
+                    </div>
+
+                    <!-- Low Stock Alerts -->
+                    <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                        <div class="flex items-center justify-between border-b pb-3 border-slate-100">
+                            <h3 class="font-bold text-slate-900 text-base">Produtos com Estoque Baixo</h3>
+                            <button onclick="switchTab('stock_alerts')" class="text-xs font-bold text-brand-600 hover:text-brand-800">Ver Alertas</button>
+                        </div>
+                        ${lowStockProducts.length === 0 ? `
+                            <div class="p-8 text-center text-slate-400 space-y-2">
+                                <i data-lucide="check-circle-2" class="w-8 h-8 mx-auto stroke-1 text-emerald-500"></i>
+                                <p class="text-xs">Todos os estoques estão adequados.</p>
+                            </div>
+                        ` : `
+                            <div class="divide-y divide-slate-100">
+                                ${lowStockProducts.slice(0, 5).map(p => `
+                                    <div class="py-3 flex items-center justify-between text-xs">
+                                        <div>
+                                            <p class="font-bold text-slate-800">${p.name}</p>
+                                            <p class="text-slate-400">Min: ${p.minStock} ${p.unit}</p>
+                                        </div>
+                                        <span class="px-2.5 py-1 bg-rose-50 text-rose-700 font-bold rounded-lg border border-rose-200">
+                                            ${p.stockQuantity} ${p.unit}
+                                        </span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        `}
+                    </div>
+                </div>
+            </div>
+            `;
+        }
+
+        function renderPOSView() {
+            const subtotal = AppState.posCart.reduce((sum, item) => sum + item.subtotal, 0);
+            const total = Math.max(0, subtotal - AppState.posDiscount);
+
+            return `
+            <div class="flex-1 flex flex-col lg:flex-row h-full overflow-hidden">
+                <!-- Left: Catalog & Search -->
+                <div class="flex-1 p-6 flex flex-col space-y-4 overflow-y-auto border-r border-slate-200">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h1 class="text-xl font-black text-slate-900">PONTO DE VENDA (PDV)</h1>
+                            <p class="text-xs text-slate-500">Selecione ou escaneie os produtos</p>
+                        </div>
+                        <button onclick="startCameraScanner('pos')" class="px-4 py-2.5 bg-brand-600 text-white font-bold text-xs rounded-xl shadow-md hover:bg-brand-700 transition flex items-center gap-2">
+                            <i data-lucide="camera" class="w-4 h-4"></i>
+                            Escanear Câmera
+                        </button>
+                    </div>
+
+                    <!-- Search Input -->
+                    <div class="relative">
+                        <i data-lucide="search" class="w-4 h-4 absolute left-3.5 top-3.5 text-slate-400"></i>
+                        <input type="text" id="pos-search-input" value="${AppState.filters.productSearch}" oninput="AppState.filters.productSearch = this.value; renderApp();" class="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-500 outline-none" placeholder="Buscar por Nome, Marca ou Código de Barras...">
+                    </div>
+
+                    <!-- Products Grid -->
+                    <div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
+                        ${AppState.products
+                            .filter(p => p.name.toLowerCase().includes(AppState.filters.productSearch.toLowerCase()) || (p.barcode && p.barcode.includes(AppState.filters.productSearch)))
+                            .map(p => `
+                                <div onclick="addToPosCart('${p.id}')" class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:border-brand-500 hover:shadow-md cursor-pointer transition flex flex-col justify-between space-y-3">
+                                    <div>
+                                        <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">${p.categoryName || 'Geral'}</p>
+                                        <h4 class="font-bold text-slate-800 text-sm leading-snug line-clamp-2">${p.name}</h4>
+                                    </div>
+                                    <div class="flex items-center justify-between pt-2 border-t border-slate-50">
+                                        <span class="font-black text-brand-700 text-sm">${formatMoney(p.sellPrice)}</span>
+                                        <span class="text-[10px] px-2 py-0.5 ${p.stockQuantity > p.minStock ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'} rounded font-semibold">
+                                            Est: ${p.stockQuantity} ${p.unit}
+                                        </span>
+                                    </div>
+                                </div>
+                            `).join('')}
+                    </div>
+                </div>
+
+                <!-- Right: Cart & Checkout -->
+                <div class="w-full lg:w-96 bg-white border-l border-slate-200 p-6 flex flex-col justify-between space-y-6">
+                    <div class="space-y-4 flex-1 flex flex-col">
+                        <div class="flex items-center justify-between border-b pb-3 border-slate-100">
+                            <h3 class="font-bold text-slate-900 text-lg">Itens no Carrinho</h3>
+                            <span class="text-xs font-bold px-2.5 py-1 bg-slate-100 text-slate-700 rounded-full">${AppState.posCart.length} item(ns)</span>
+                        </div>
+
+                        <!-- Cart Items List -->
+                        <div class="flex-1 overflow-y-auto space-y-3 pr-1">
+                            ${AppState.posCart.length === 0 ? `
+                                <div class="h-48 flex flex-col items-center justify-center text-slate-400 space-y-2">
+                                    <i data-lucide="shopping-cart" class="w-10 h-10 stroke-1"></i>
+                                    <p class="text-xs font-medium">Carrinho vazio</p>
+                                </div>
+                            ` : AppState.posCart.map(item => `
+                                <div class="p-3 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between gap-2">
+                                    <div class="flex-1">
+                                        <p class="font-bold text-slate-800 text-xs line-clamp-1">${item.name}</p>
+                                        <p class="text-[11px] text-slate-500">${formatMoney(item.unitPrice)} / ${item.unit}</p>
+                                    </div>
+                                    <div class="flex items-center gap-1.5">
+                                        <button onclick="updateCartItemQty('${item.id}', ${item.quantity - 1})" class="w-6 h-6 bg-white border rounded flex items-center justify-center font-bold text-xs hover:bg-slate-100">-</button>
+                                        <span class="text-xs font-bold px-1.5">${item.quantity}</span>
+                                        <button onclick="updateCartItemQty('${item.id}', ${item.quantity + 1})" class="w-6 h-6 bg-white border rounded flex items-center justify-center font-bold text-xs hover:bg-slate-100">+</button>
+                                    </div>
+                                    <button onclick="removeFromCart('${item.id}')" class="text-slate-400 hover:text-rose-600 p-1">
+                                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                    </button>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+
+                    <!-- Payment Config -->
+                    <div class="space-y-4 pt-4 border-t border-slate-100">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Forma de Pagamento</label>
+                            <select onchange="AppState.posPaymentMethod = this.value; renderApp();" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-500">
+                                <option value="DINHEIRO" ${AppState.posPaymentMethod === 'DINHEIRO' ? 'selected' : ''}>Dinheiro</option>
+                                <option value="PIX" ${AppState.posPaymentMethod === 'PIX' ? 'selected' : ''}>PIX</option>
+                                <option value="CARTAO" ${AppState.posPaymentMethod === 'CARTAO' ? 'selected' : ''}>Cartão de Crédito/Débito</option>
+                                <option value="FIADO" ${AppState.posPaymentMethod === 'FIADO' ? 'selected' : ''}>Fiado (Conta do Cliente)</option>
+                            </select>
+                        </div>
+
+                        ${AppState.posPaymentMethod === 'FIADO' ? `
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Cliente Fiado *</label>
+                                <select onchange="AppState.posClient = this.value;" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-500">
+                                    <option value="">-- Selecione o Cliente --</option>
+                                    ${AppState.clients.filter(c => c.type === 'FIADO' && c.active).map(c => `
+                                        <option value="${c.id}" ${AppState.posClient === c.id ? 'selected' : ''}>
+                                            ${c.name} (Lím: ${formatMoney(c.creditLimit - (c.currentDebt||0))})
+                                        </option>
+                                    `).join('')}
+                                </select>
+                            </div>
+                        ` : ''}
+
+                        <!-- Calculation summary -->
+                        <div class="space-y-1.5 bg-slate-50 p-4 rounded-xl border border-slate-100 text-xs">
+                            <div class="flex justify-between text-slate-500">
+                                <span>Subtotal</span>
+                                <span>${formatMoney(subtotal)}</span>
+                            </div>
+                            <div class="flex justify-between font-black text-slate-900 text-base pt-2 border-t border-slate-200">
+                                <span>TOTAL</span>
+                                <span>${formatMoney(total)}</span>
+                            </div>
+                        </div>
+
+                        <button onclick="finalizeSale()" class="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-lg transition flex items-center justify-center gap-2 text-sm">
+                            <i data-lucide="check-circle-2" class="w-5 h-5"></i>
+                            Finalizar e Aprovar Venda
+                        </button>
+                    </div>
+                </div>
+            </div>
+            `;
+        }
+
+        function renderProductsView() {
+            return `
+            <div class="p-8 space-y-6 max-w-7xl mx-auto w-full">
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                    <div>
+                        <h1 class="text-xl font-black text-slate-900">CADASTRO DE PRODUTOS</h1>
+                        <p class="text-xs text-slate-500">Gerencie todos os itens comercializados no estabelecimento</p>
+                    </div>
+                    <button onclick="openProductModal()" class="px-4 py-2.5 bg-brand-600 text-white font-bold text-xs rounded-xl shadow-md hover:bg-brand-700 transition flex items-center gap-2">
+                        <i data-lucide="plus" class="w-4 h-4"></i>
+                        Cadastrar Novo Produto
+                    </button>
+                </div>
+
+                <!-- Products Table -->
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="bg-slate-50 text-[11px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100">
+                                    <th class="p-4">Produto</th>
+                                    <th class="p-4">Código de Barras</th>
+                                    <th class="p-4">Categoria</th>
+                                    <th class="p-4">Preço Compra</th>
+                                    <th class="p-4">Preço Venda</th>
+                                    <th class="p-4">Estoque Atual</th>
+                                    <th class="p-4 text-right">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100 text-xs">
+                                ${AppState.products.length === 0 ? `
+                                    <tr>
+                                        <td colspan="7" class="p-8 text-center text-slate-400">Nenhum produto cadastrado no sistema.</td>
+                                    </tr>
+                                ` : AppState.products.map(p => `
+                                    <tr class="hover:bg-slate-50 transition">
+                                        <td class="p-4 font-bold text-slate-800">${p.name}</td>
+                                        <td class="p-4 font-mono text-slate-500">${p.barcode || '-'}</td>
+                                        <td class="p-4 text-slate-600">${p.categoryName || 'Geral'}</td>
+                                        <td class="p-4 text-slate-600">${formatMoney(p.costPrice)}</td>
+                                        <td class="p-4 font-bold text-emerald-600">${formatMoney(p.sellPrice)}</td>
+                                        <td class="p-4">
+                                            <span class="px-2.5 py-1 ${p.stockQuantity <= p.minStock ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'} border rounded-lg font-bold">
+                                                ${p.stockQuantity} ${p.unit}
+                                            </span>
+                                        </td>
+                                        <td class="p-4 text-right space-x-2">
+                                            <button onclick="openProductModal('${p.id}')" class="p-1.5 text-slate-400 hover:text-brand-600 rounded-lg"><i data-lucide="edit-3" class="w-4 h-4"></i></button>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            `;
+        }
+
+        window.openProductModal = function(productId = null, prefilledBarcode = '') {
+            const product = productId ? AppState.products.find(p => p.id === productId) : null;
+            
+            const body = `
+            <form id="product-form" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Nome do Produto *</label>
+                    <input type="text" id="p-name" value="${product ? product.name : ''}" required class="w-full px-3 py-2 rounded-xl border text-xs outline-none focus:ring-2 focus:ring-brand-500">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Código de Barras</label>
+                        <input type="text" id="p-barcode" value="${product ? (product.barcode || '') : prefilledBarcode}" class="w-full px-3 py-2 rounded-xl border text-xs outline-none focus:ring-2 focus:ring-brand-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Unidade Base *</label>
+                        <select id="p-unit" required class="w-full px-3 py-2 rounded-xl border text-xs outline-none focus:ring-2 focus:ring-brand-500">
+                            <option value="un">Unidade (un)</option>
+                            <option value="kg">Quilograma (kg)</option>
+                            <option value="L">Litro (L)</option>
+                            <option value="cx">Caixa (cx)</option>
+                            <option value="fd">Fardo (fd)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Preço de Custo (R$)</label>
+                        <input type="number" step="0.01" id="p-cost" value="${product ? product.costPrice : '0.00'}" class="w-full px-3 py-2 rounded-xl border text-xs outline-none focus:ring-2 focus:ring-brand-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Preço de Venda (R$) *</label>
+                        <input type="number" step="0.01" id="p-sell" value="${product ? product.sellPrice : '0.00'}" required class="w-full px-3 py-2 rounded-xl border text-xs outline-none focus:ring-2 focus:ring-brand-500">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Estoque Inicial</label>
+                        <input type="number" id="p-stock" value="${product ? product.stockQuantity : '0'}" ${product ? 'disabled' : ''} class="w-full px-3 py-2 rounded-xl border text-xs outline-none focus:ring-2 focus:ring-brand-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Estoque Mínimo</label>
+                        <input type="number" id="p-minstock" value="${product ? product.minStock : '5'}" class="w-full px-3 py-2 rounded-xl border text-xs outline-none focus:ring-2 focus:ring-brand-500">
+                    </div>
+                </div>
+            </form>
+            `;
+
+            const buttons = `
+            <button onclick="closeModal()" class="px-4 py-2 bg-slate-100 text-slate-700 text-xs font-bold rounded-xl">Cancelar</button>
+            <button onclick="saveProduct('${productId || ''}')" class="px-4 py-2 bg-brand-600 text-white text-xs font-bold rounded-xl shadow">Salvar Produto</button>
+            `;
+
+            showModal(productId ? 'Editar Produto' : 'Novo Produto', body, buttons);
+        };
+
+        window.saveProduct = async function(productId) {
+            const name = document.getElementById('p-name').value;
+            const barcode = document.getElementById('p-barcode').value.trim();
+            const unit = document.getElementById('p-unit').value;
+            const costPrice = parseFloat(document.getElementById('p-cost').value) || 0;
+            const sellPrice = parseFloat(document.getElementById('p-sell').value) || 0;
+            const stockQuantity = parseInt(document.getElementById('p-stock').value) || 0;
+            const minStock = parseInt(document.getElementById('p-minstock').value) || 5;
+
+            if (!name || sellPrice <= 0) {
+                showToast("Preencha os campos obrigatórios corretamente.", "error");
+                return;
+            }
+
+            // Check Duplicate Barcode
+            if (barcode) {
+                const dup = AppState.products.find(p => p.barcode === barcode && p.id !== productId);
+                if (dup) {
+                    showToast(`CÓDIGO DE BARRAS JÁ CADASTRADO NO PRODUTO: ${dup.name}`, "error");
+                    return;
+                }
+            }
+
+            const id = productId || crypto.randomUUID();
+            const pData = {
+                id,
+                name,
+                barcode,
+                unit,
+                costPrice,
+                sellPrice,
+                stockQuantity: productId ? (AppState.products.find(p => p.id === productId)?.stockQuantity || 0) : stockQuantity,
+                minStock,
+                active: true
+            };
+
+            await saveData('products', id, pData);
+            await logAudit(productId ? 'produto_editado' : 'produto_cadastrado', `Produto ${name}`, null, pData);
+
+            showToast("PRODUTO SALVO COM SUCESSO!", "success");
+            closeModal();
+            renderApp();
+        };
+
+        function renderGenericModule(title, description, icon = 'box') {
+            return `
+            <div class="p-8 space-y-6 max-w-7xl mx-auto w-full">
+                <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
+                    <div class="p-3 bg-brand-50 text-brand-600 rounded-2xl">
+                        <i data-lucide="${icon}" class="w-8 h-8"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-xl font-black text-slate-900">${title}</h1>
+                        <p class="text-xs text-slate-500">${description}</p>
+                    </div>
+                </div>
+
+                <div class="bg-white p-12 rounded-2xl border border-slate-200 shadow-sm text-center space-y-3">
+                    <i data-lucide="folder-open" class="w-12 h-12 stroke-1 text-slate-300 mx-auto"></i>
+                    <p class="text-sm font-bold text-slate-700">Módulo ${title} Operacional</p>
+                    <p class="text-xs text-slate-400 max-w-md mx-auto">Os dados deste módulo são sincronizados e gerenciados em tempo real com o banco de dados do EDUARDO BEBIDAS.</p>
+                </div>
+            </div>
+            `;
+        }
+
+        function renderApp() {
+            const root = document.getElementById('app-root');
+            
+            // Check Users setup
+            if (AppState.users.length === 0) {
+                root.innerHTML = renderFirstSetup();
+            } else if (!AppState.currentUser) {
+                root.innerHTML = renderLogin();
+            } else {
+                let content = '';
+                switch (AppState.activeTab) {
+                    case 'dashboard': content = renderDashboardView(); break;
+                    case 'pos': content = renderPOSView(); break;
+                    case 'products': content = renderProductsView(); break;
+                    case 'cash': content = renderGenericModule('Caixa', 'Abertura, fechamento e sangrias de caixa', 'wallet'); break;
+                    case 'stock_entries': content = renderGenericModule('Entradas de Mercadoria', 'Registro de notas e entradas de fornecedores', 'arrow-down-right'); break;
+                    case 'stock': content = renderGenericModule('Estoque Geral', 'Auditoria e inventário de mercadorias', 'boxes'); break;
+                    case 'stock_alerts': content = renderGenericModule('Alertas de Estoque', 'Acompanhamento de itens com estoque crítico', 'alert-circle'); break;
+                    case 'clients': content = renderGenericModule('Cadastro de Clientes', 'Gestão de clientes e limites de fiado', 'users'); break;
+                    case 'fiado': content = renderGenericModule('Gestão de Fiado', 'Contas a receber e pagamentos', 'credit-card'); break;
+                    case 'fiado_alerts': content = renderGenericModule('Alertas do Fiado', 'Alertas de cobrança de 15 e 30 dias', 'bell'); break;
+                    case 'suppliers': content = renderGenericModule('Fornecedores', 'Cadastro de distribuidoras e parceiros', 'truck'); break;
+                    case 'calendar': content = renderGenericModule('Calendário Comercial', 'Vencimentos e histórico', 'calendar'); break;
+                    case 'reports': content = renderGenericModule('Relatórios Financeiros', 'Balanço e vendas', 'bar-chart-3'); break;
+                    case 'users': content = renderGenericModule('Usuários e Permissões', 'Controle de acessos dos funcionários', 'user-cog'); break;
+                    case 'settings': content = renderGenericModule('Configurações', 'Parâmetros do estabelecimento EDUARDO BEBIDAS', 'settings'); break;
+                    case 'audit': content = renderGenericModule('Auditoria do Sistema', 'Histórico imutável de operações', 'shield-alert'); break;
+                    default: content = renderDashboardView();
+                }
+
+                root.innerHTML = `
+                <div class="flex h-screen bg-slate-50 overflow-hidden">
+                    ${renderSidebar()}
+                    <main class="flex-1 overflow-y-auto flex flex-col">
+                        ${content}
+                    </main>
+                </div>
+                `;
+            }
+
+            lucide.createIcons();
+        }
+
+        // Initialize App on Window Load
+        window.onload = async function() {
+            await initAuth();
+            renderApp();
+        };
+    </script>
+</body>
+</html>
+```
